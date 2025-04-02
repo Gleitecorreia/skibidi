@@ -1,0 +1,127 @@
+package com.example.board;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import jakarta.persistence.*;
+import java.util.List;
+
+@SpringBootApplication
+public class BoardApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(BoardApplication.class, args);
+    }
+}
+
+@Entity
+class Task {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    
+    private String title;
+    private String description;
+    
+    // Por exemplo: TODO, IN_PROGRESS, DONE
+    private String status;
+    
+    // Getters e Setters
+    
+    public Long getId() {
+        return id;
+    }
+    public void setId(Long id) {
+        this.id = id;
+    }
+    
+    public String getTitle() {
+        return title;
+    }
+    public void setTitle(String title) {
+        this.title = title;
+    }
+    
+    public String getDescription() {
+        return description;
+    }
+    public void setDescription(String description) {
+        this.description = description;
+    }
+    
+    public String getStatus() {
+        return status;
+    }
+    public void setStatus(String status) {
+        this.status = status;
+    }
+}
+
+interface TaskRepository extends JpaRepository<Task, Long> {
+}
+
+@Service
+class TaskService {
+    @Autowired
+    private TaskRepository repository;
+    
+    public List<Task> getAllTasks() {
+        return repository.findAll();
+    }
+    
+    public Task getTaskById(Long id) {
+        return repository.findById(id).orElse(null);
+    }
+    
+    public Task createTask(Task task) {
+        return repository.save(task);
+    }
+    
+    public Task updateTask(Long id, Task updatedTask) {
+        return repository.findById(id).map(task -> {
+            task.setTitle(updatedTask.getTitle());
+            task.setDescription(updatedTask.getDescription());
+            task.setStatus(updatedTask.getStatus());
+            return repository.save(task);
+        }).orElseThrow(() -> new RuntimeException("Tarefa não encontrada"));
+    }
+    
+    public void deleteTask(Long id) {
+        repository.deleteById(id);
+    }
+}
+
+@RestController
+@RequestMapping("/tasks")
+class TaskController {
+    @Autowired
+    private TaskService service;
+    
+    @GetMapping
+    public List<Task> getAllTasks() {
+        return service.getAllTasks();
+    }
+    
+    @GetMapping("/{id}")
+    public Task getTaskById(@PathVariable Long id) {
+        return service.getTaskById(id);
+    }
+    
+    @PostMapping
+    public Task createTask(@RequestBody Task task) {
+        return service.createTask(task);
+    }
+    
+    @PutMapping("/{id}")
+    public Task updateTask(@PathVariable Long id, @RequestBody Task task) {
+        return service.updateTask(id, task);
+    }
+    
+    @DeleteMapping("/{id}")
+    public void deleteTask(@PathVariable Long id) {
+        service.deleteTask(id);
+    }
+}
