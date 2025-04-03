@@ -1,126 +1,42 @@
-// ===== BACKEND (Node.js + Express) ===== //
-const express = require("express");
-const cors = require("cors");
-
-const app = express();
-app.use(express.json());
-app.use(cors());
-
-let quizzes = [
-  {
-    id: 1,
-    title: "Qual personagem de anime você seria?",
-    questions: [
-      {
-        question: "Qual sua cor favorita?",
-        options: [
-          { text: "Vermelho", value: "A" },
-          { text: "Azul", value: "B" },
-          { text: "Verde", value: "C" },
-        ],
-      },
-      {
-        question: "O que você faz no tempo livre?",
-        options: [
-          { text: "Treino artes marciais", value: "A" },
-          { text: "Leio livros", value: "B" },
-          { text: "Durmo", value: "C" },
-        ],
-      },
-    ],
-    results: {
-      A: "Você seria Goku!",
-      B: "Você seria Light Yagami!",
-      C: "Você seria Snorlax!",
-    },
-  },
-];
-
-app.get("/quizzes", (req, res) => res.json(quizzes));
-
-app.post("/quizzes/:id/answer", (req, res) => {
-  const { id } = req.params;
-  const { answers } = req.body;
-  const quiz = quizzes.find((q) => q.id == id);
-  if (!quiz) return res.status(404).json({ error: "Quiz não encontrado!" });
-
-  const score = answers.reduce((acc, val) => {
-    acc[val] = (acc[val] || 0) + 1;
-    return acc;
-  }, {});
-
-  const result = Object.keys(score).reduce((a, b) => (score[a] > score[b] ? a : b));
-  res.json({ result: quiz.results[result] || "Nenhum resultado encontrado!" });
-});
-
-app.listen(3000, () => console.log("Servidor rodando na porta 3000 🚀"));
-
-// ===== FRONTEND (Angular) ===== //
-import { Component, Injectable, OnInit } from '@angular/core';
-import { HttpClient, HttpClientModule } from '@angular/common/http';
-import { Observable } from 'rxjs';
-
-@Injectable({ providedIn: 'root' })
-export class QuizService {
-  private apiUrl = 'http://localhost:3000/quizzes';
-  constructor(private http: HttpClient) {}
-  getQuizzes(): Observable<any> { return this.http.get<any>(this.apiUrl); }
-  submitAnswers(id: number, answers: string[]): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/${id}/answer`, { answers });
-  }
-}
+import { Component, Input } from '@angular/core';
+import { QuizResult } from '../../models/quiz.model';
 
 @Component({
-  selector: 'app-quiz',
+  selector: 'app-quiz-result',
   template: `
-    <div *ngIf="!selectedQuiz">
-      <h2>Escolha um Quiz:</h2>
-      <ul>
-        <li *ngFor="let quiz of quizzes">
-          <button (click)="startQuiz(quiz)">{{ quiz.title }}</button>
-        </li>
-      </ul>
-    </div>
-
-    <div *ngIf="selectedQuiz">
-      <h2>{{ selectedQuiz.title }}</h2>
-      <div *ngFor="let question of selectedQuiz.questions; let i = index">
-        <p>{{ question.question }}</p>
-        <div *ngFor="let option of question.options">
-          <label>
-            <input type="radio" name="q{{ i }}" (change)="answers[i] = option.value" />
-            {{ option.text }}
-          </label>
-        </div>
-      </div>
-      <button (click)="submitQuiz()">Enviar Respostas</button>
-      <div *ngIf="result"><h3>Resultado: {{ result }}</h3></div>
+    <div class="result-card">
+      <h1>{{ result.title }}</h1>
+      <img [src]="result.image" [alt]="result.title">
+      <p>{{ result.description }}</p>
+      <button (click)="shareOnSocialMedia('facebook')">Facebook</button>
+      <button (click)="shareOnSocialMedia('twitter')">Twitter</button>
     </div>
   `,
-  styleUrls: ['./quiz.component.css'],
+  styles: [`
+    .result-card {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      max-width: 500px;
+      margin: 0 auto;
+    }
+    button {
+      margin: 5px;
+      padding: 8px 15px;
+    }
+  `]
 })
-export class QuizComponent implements OnInit {
-  quizzes: any[] = [];
-  selectedQuiz: any = null;
-  answers: string[] = [];
-  result: string | null = null;
-  constructor(private quizService: QuizService) {}
-  ngOnInit(): void { this.quizService.getQuizzes().subscribe((data) => this.quizzes = data); }
-  startQuiz(quiz: any): void { this.selectedQuiz = quiz; this.answers = []; this.result = null; }
-  submitQuiz(): void {
-    this.quizService.submitAnswers(this.selectedQuiz.id, this.answers).subscribe((data) => this.result = data.result);
+export class QuizResultComponent {
+  @Input() result!: QuizResult;
+
+  shareOnSocialMedia(platform: string): void {
+    const text = `Meu resultado: ${this.result.title} - ${this.result.description}`;
+    const url = window.location.href;
+    
+    if (platform === 'facebook') {
+      window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`);
+    } else if (platform === 'twitter') {
+      window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`);
+    }
   }
 }
-
-import { NgModule } from '@angular/core';
-import { BrowserModule } from '@angular/platform-browser';
-import { AppComponent } from './app.component';
-import { HttpClientModule } from '@angular/common/http';
-
-@NgModule({
-  declarations: [AppComponent, QuizComponent],
-  imports: [BrowserModule, HttpClientModule],
-  providers: [],
-  bootstrap: [AppComponent],
-})
-export class AppModule {}
