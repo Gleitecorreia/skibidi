@@ -1,0 +1,88 @@
+import os
+import azure.cognitiveservices.speech as speechsdk
+from azure.core.credentials import AzureKeyCredential
+from azure.ai.textanalytics import TextAnalyticsClient
+
+# Configurações do Speech Studio
+speech_key = "SEU_SPEECH_KEY"
+speech_region = "SEU_REGIAO"
+audio_file = "audio.wav"  # Substitua pelo seu arquivo de áudio
+
+# Configurações do Language Studio
+language_key = "SEU_LANGUAGE_KEY"
+language_endpoint = "SEU_ENDPOINT"
+
+# 1. Transcrever áudio para texto usando Speech Studio
+def transcribe_speech():
+    speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=speech_region)
+    audio_config = speechsdk.audio.AudioConfig(filename=audio_file)
+    
+    speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
+    
+    print("Transcrevendo áudio...")
+    result = speech_recognizer.recognize_once()
+    
+    if result.reason == speechsdk.ResultReason.RecognizedSpeech:
+        print(f"Texto transcrito: {result.text}")
+        return result.text
+    elif result.reason == speechsdk.ResultReason.NoMatch:
+        print("Não foi possível reconhecer a fala")
+        return None
+    elif result.reason == speechsdk.ResultReason.Canceled:
+        cancellation = result.cancellation_details
+        print(f"Cancelado: {cancellation.reason}")
+        return None
+
+# 2. Analisar texto com Language Studio
+def analyze_text(text):
+    credential = AzureKeyCredential(language_key)
+    text_analytics_client = TextAnalyticsClient(endpoint=language_endpoint, credential=credential)
+    
+    print("\nAnalisando texto...")
+    
+    # Análise de sentimento
+    sentiment_result = text_analytics_client.analyze_sentiment([text])[0]
+    print(f"\nSentimento: {sentiment_result.sentiment}")
+    print(f"Pontuações: Positivo={sentiment_result.confidence_scores.positive:.2f}, Neutro={sentiment_result.confidence_scores.neutral:.2f}, Negativo={sentiment_result.confidence_scores.negative:.2f}")
+    
+    # Reconhecimento de entidades
+    entities_result = text_analytics_client.recognize_entities([text])[0]
+    if entities_result.entities:
+        print("\nEntidades reconhecidas:")
+        for entity in entities_result.entities:
+            print(f"- {entity.text} ({entity.category})")
+    
+    # Extração de frases-chave
+    key_phrases_result = text_analytics_client.extract_key_phrases([text])[0]
+    if key_phrases_result.key_phrases:
+        print("\nFrases-chave:")
+        for phrase in key_phrases_result.key_phrases:
+            print(f"- {phrase}")
+
+# 3. Sintetizar texto em fala (opcional)
+def text_to_speech(text):
+    speech_config = speechsdk.SpeechConfig(subscription=speech_key, region=speech_region)
+    audio_config = speechsdk.audio.AudioOutputConfig(use_default_speaker=True)
+    
+    synthesizer = speechsdk.SpeechSynthesizer(speech_config=speech_config, audio_config=audio_config)
+    
+    print("\nSintetizando resposta em áudio...")
+    result = synthesizer.speak_text_async(text).get()
+    
+    if result.reason == speechsdk.ResultReason.SynthesizingAudioCompleted:
+        print("Síntese de fala concluída")
+    else:
+        print(f"Erro na síntese: {result.reason}")
+
+# Fluxo principal
+if __name__ == "__main__":
+    # Transcrever áudio
+    transcribed_text = transcribe_speech()
+    
+    if transcribed_text:
+        # Analisar texto
+        analyze_text(transcribed_text)
+        
+        # Opcional: converter resposta em fala
+        response_text = "Análise concluída. Verifique os resultados no console."
+        text_to_speech(response_text)
