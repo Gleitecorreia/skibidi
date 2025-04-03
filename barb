@@ -1,165 +1,75 @@
-package com.barbearia;
+// SecurityConfig.java
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
 
-import org.springframework.boot.CommandLineRunner;
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.context.annotation.Bean;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
-import org.springframework.stereotype.Service;
-import org.springframework.web.bind.annotation.*;
+    @Autowired
+    private UserDetailsService userDetailsService;
 
-import jakarta.persistence.*;
-import jakarta.validation.constraints.NotBlank;
-import lombok.Data;
-import lombok.RequiredArgsConstructor;
+    @Autowired
+    private JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
 
-import java.time.LocalDateTime;
-import java.util.List;
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http.csrf().disable()
+            .authorizeRequests()
+            .antMatchers("/api/auth/**").permitAll()
+            .anyRequest().authenticated()
+            .and()
+            .exceptionHandling().authenticationEntryPoint(jwtAuthenticationEntryPoint)
+            .and()
+            .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS);
 
-// 🚀 Aplicação Principal (Spring Boot)
-@SpringBootApplication
-public class BarbeariaApplication {
-    public static void main(String[] args) {
-        SpringApplication.run(BarbeariaApplication.class, args);
+        http.addFilterBefore(jwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class);
     }
 
     @Bean
-    CommandLineRunner initData(ClienteRepository clienteRepository, AgendamentoRepository agendamentoRepository) {
-        return args -> {
-            Cliente cliente1 = new Cliente();
-            cliente1.setNome("João Silva");
-            cliente1.setTelefone("11999999999");
-            clienteRepository.save(cliente1);
+    public JwtAuthenticationFilter jwtAuthenticationFilter() {
+        return new JwtAuthenticationFilter();
+    }
 
-            Cliente cliente2 = new Cliente();
-            cliente2.setNome("Ana Souza");
-            cliente2.setTelefone("11988888888");
-            clienteRepository.save(cliente2);
-
-            Agendamento agendamento = new Agendamento();
-            agendamento.setCliente(cliente1);
-            agendamento.setDataHora(LocalDateTime.now().plusDays(1));
-            agendamentoRepository.save(agendamento);
-        };
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 }
 
-// 🚀 Modelo Cliente
-@Data
-@Entity
-@Table(name = "clientes")
-class Cliente {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+// JwtAuthenticationFilter.java
+public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    @NotBlank(message = "Nome é obrigatório")
-    private String nome;
+    @Autowired
+    private JwtTokenProvider tokenProvider;
 
-    @NotBlank(message = "Telefone é obrigatório")
-    private String telefone;
-}
+    @Autowired
+    private UserDetailsService userDetailsService;
 
-// 🚀 Repositório Cliente
-@Repository
-interface ClienteRepository extends JpaRepository<Cliente, Long> {}
+    @Override
+    protected void doFilterInternal(HttpServletRequest request, 
+                                  HttpServletResponse response, 
+                                  FilterChain filterChain) throws ServletException, IOException {
+        try {
+            String jwt = getJwtFromRequest(request);
+            
+            if (StringUtils.hasText(jwt) && tokenProvider.validateToken(jwt)) {
+                Long userId = tokenProvider.getUserIdFromJWT(jwt);
+                UserDetails userDetails = userDetailsService.loadUserById(userId);
+                UsernamePasswordAuthenticationToken authentication = 
+                    new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+                authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+            }
+        } catch (Exception ex) {
+            logger.error("Could not set user authentication in security context", ex);
+        }
 
-// 🚀 Serviço Cliente
-@Service
-@RequiredArgsConstructor
-class ClienteService {
-    private final ClienteRepository repository;
-
-    public Cliente salvarCliente(Cliente cliente) {
-        return repository.save(cliente);
+        filterChain.doFilter(request, response);
     }
 
-    public List<Cliente> listarClientes() {
-        return repository.findAll();
-    }
-
-    public Cliente buscarPorId(Long id) {
-        return repository.findById(id).orElseThrow(() -> new RuntimeException("Cliente não encontrado"));
-    }
-
-    public void deletarCliente(Long id) {
-        repository.deleteById(id);
-    }
-}
-
-// 🚀 Controlador Cliente (API REST)
-@RestController
-@RequestMapping("/clientes")
-@RequiredArgsConstructor
-class ClienteController {
-    private final ClienteService service;
-
-    @PostMapping
-    public Cliente cadastrar(@RequestBody Cliente cliente) {
-        return service.salvarCliente(cliente);
-    }
-
-    @GetMapping
-    public List<Cliente> listar() {
-        return service.listarClientes();
-    }
-
-    @GetMapping("/{id}")
-    public Cliente buscarPorId(@PathVariable Long id) {
-        return service.buscarPorId(id);
-    }
-
-    @DeleteMapping("/{id}")
-    public void deletar(@PathVariable Long id) {
-        service.deletarCliente(id);
-    }
-}
-
-// 🚀 Modelo Agendamento
-@Data
-@Entity
-@Table(name = "agendamentos")
-class Agendamento {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    @ManyToOne
-    @JoinColumn(name = "cliente_id")
-    private Cliente cliente;
-
-    private LocalDateTime dataHora;
-}
-
-// 🚀 Repositório Agendamento
-@Repository
-interface AgendamentoRepository extends JpaRepository<Agendamento, Long> {}
-
-// 🚀 Controlador Agendamento (API REST)
-@RestController
-@RequestMapping("/agendamentos")
-@RequiredArgsConstructor
-class AgendamentoController {
-    private final AgendamentoRepository repository;
-
-    @PostMapping
-    public Agendamento cadastrar(@RequestBody Agendamento agendamento) {
-        return repository.save(agendamento);
-    }
-
-    @GetMapping
-    public List<Agendamento> listar() {
-        return repository.findAll();
-    }
-
-    @GetMapping("/{id}")
-    public Agendamento buscarPorId(@PathVariable Long id) {
-        return repository.findById(id).orElseThrow(() -> new RuntimeException("Agendamento não encontrado"));
-    }
-
-    @DeleteMapping("/{id}")
-    public void deletar(@PathVariable Long id) {
-        repository.deleteById(id);
+    private String getJwtFromRequest(HttpServletRequest request) {
+        String bearerToken = request.getHeader("Authorization");
+        if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
+            return bearerToken.substring(7);
+        }
+        return null;
     }
 }
