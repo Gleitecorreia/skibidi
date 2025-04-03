@@ -1,0 +1,147 @@
+from azure.core.credentials import AzureKeyCredential
+from azure.search.documents.indexes import SearchIndexClient
+from azure.search.documents.indexes.models import *
+from azure.search.documents import SearchClient
+from datetime import datetime
+import os
+
+# Configurações do Azure Cognitive Search
+service_name = "SEU_SERVICO_SEARCH"  # Substitua pelo nome do seu serviço
+key = "SUA_CHAVE_SEARCH"            # Substitua pela sua chave primária ou secundária
+index_name = "indice-documentos"
+
+# 1. Criar índice de pesquisa
+def criar_indice():
+    credential = AzureKeyCredential(key)
+    index_client = SearchIndexClient(endpoint=f"https://{service_name}.search.windows.net",
+                                    credential=credential)
+
+    fields = [
+        SimpleField(name="id", type=SearchFieldDataType.String, key=True),
+        SearchableField(name="titulo", type=SearchFieldDataType.String, analyzer_name="pt.microsoft"),
+        SearchableField(name="conteudo", type=SearchFieldDataType.String, analyzer_name="pt.microsoft"),
+        SearchableField(name="categorias", type=SearchFieldDataType.Collection(SearchFieldDataType.String)),
+        SimpleField(name="data_criacao", type=SearchFieldDataType.DateTimeOffset),
+        SimpleField(name="relevancia", type=SearchFieldDataType.Int32)
+    ]
+
+    index = SearchIndex(
+        name=index_name,
+        fields=fields,
+        scoring_profiles=[
+            ScoringProfile(
+                name="relevancia_boost",
+                text_weights=TextWeights(weights={"titulo": 3, "conteudo": 2})
+        ],
+        default_scoring_profile="relevancia_boost",
+        suggesters=[SearchSuggester(name="sg", source_fields=["titulo"])]
+    )
+
+    try:
+        index_client.create_index(index)
+        print(f"Índice {index_name} criado com sucesso")
+    except Exception as e:
+        print(f"Erro ao criar índice: {e}")
+
+# 2. Ingestão de documentos
+def ingerir_documentos():
+    credential = AzureKeyCredential(key)
+    search_client = SearchClient(endpoint=f"https://{service_name}.search.windows.net",
+                                index_name=index_name,
+                                credential=credential)
+
+    documents = [
+        {
+            "id": "1",
+            "titulo": "Introdução à Mineração de Dados",
+            "conteudo": "A mineração de dados é o processo de descobrir padrões em grandes conjuntos de dados...",
+            "categorias": ["ciência de dados", "aprendizado de máquina"],
+            "data_criacao": datetime.now(),
+            "relevancia": 5
+        },
+        {
+            "id": "2",
+            "titulo": "Azure Cognitive Search",
+            "conteudo": "O Azure Cognitive Search é um serviço de pesquisa em nuvem que oferece experiência de busca rica...",
+            "categorias": ["azure", "pesquisa"],
+            "data_criacao": datetime.now(),
+            "relevancia": 4
+        },
+        {
+            "id": "3",
+            "titulo": "Técnicas de Organização Documental",
+            "conteudo": "A organização eficiente de documentos permite melhor recuperação da informação...",
+            "categorias": ["gestão documental", "produtividade"],
+            "data_criacao": datetime.now(),
+            "relevancia": 3
+        }
+    ]
+
+    try:
+        result = search_client.upload_documents(documents=documents)
+        print(f"{len(documents)} documentos indexados com sucesso")
+    except Exception as e:
+        print(f"Erro ao indexar documentos: {e}")
+
+# 3. Funções de pesquisa
+def pesquisar_documentos(query, filtro=None):
+    credential = AzureKeyCredential(key)
+    search_client = SearchClient(endpoint=f"https://{service_name}.search.windows.net",
+                                index_name=index_name,
+                                credential=credential)
+
+    results = search_client.search(
+        search_text=query,
+        filter=filtro,
+        highlight_fields="conteudo",
+        highlight_pre_tag="<mark>",
+        highlight_post_tag="</mark>",
+        top=5
+    )
+    
+    print(f"\nResultados para: '{query}'")
+    for result in results:
+        print(f"\nTítulo: {result['titulo']}")
+        print(f"Categorias: {', '.join(result['categorias'])}")
+        print(f"Relevância: {result['@search.score']}")
+        
+        if 'highlights' in result:
+            print("Trechos relevantes:")
+            for highlight in result['highlights']['conteudo']:
+                print(f"- {highlight}")
+
+def pesquisar_com_facetas():
+    credential = AzureKeyCredential(key)
+    search_client = SearchClient(endpoint=f"https://{service_name}.search.windows.net",
+                                index_name=index_name,
+                                credential=credential)
+
+    results = search_client.search(
+        search_text="*",
+        facets=["categorias"],
+        top=0
+    )
+    
+    print("\nCategorias disponíveis (facetas):")
+    for categoria in results.get_facets()["categorias"]:
+        print(f"- {categoria['value']} ({categoria['count']} documentos)")
+
+# Execução principal
+if __name__ == "__main__":
+    print("=== LAB: Organização de Documentos e Pesquisa com IA ===")
+    
+    # 1. Criar índice
+    print("\n1. Criando índice de pesquisa...")
+    criar_indice()
+    
+    # 2. Ingerir documentos
+    print("\n2. Ingerindo documentos de exemplo...")
+    ingerir_documentos()
+    
+    # 3. Realizar pesquisas
+    print("\n3. Testando funcionalidades de pesquisa:")
+    pesquisar_documentos("mineração de dados")
+    pesquisar_documentos("azure", "relevancia ge 4")
+    pesquisar_com_facetas()
+    
+    print("\nLaboratório concluído com sucesso!")
