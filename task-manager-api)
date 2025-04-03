@@ -1,89 +1,172 @@
-package com.example.taskmanager;
+// Arquivo: src/main/java/com/example/api/ApiApplication.java
+package com.example.api;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Service;
-import org.springframework.beans.factory.annotation.Autowired;
-
-import jakarta.persistence.*;
-import java.util.List;
 
 @SpringBootApplication
-public class TaskManagerApplication {
+public class ApiApplication {
     public static void main(String[] args) {
-        SpringApplication.run(TaskManagerApplication.class, args);
+        SpringApplication.run(ApiApplication.class, args);
     }
 }
 
+// Arquivo: src/main/java/com/example/api/config/OpenApiConfig.java
+package com.example.api.config;
+
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.info.Info;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class OpenApiConfig {
+    @Bean
+    public OpenAPI customOpenAPI() {
+        return new OpenAPI()
+                .info(new Info()
+                        .title("Product API")
+                        .version("1.0")
+                        .description("API for managing products"));
+    }
+}
+
+// Arquivo: src/main/java/com/example/api/model/Product.java
+package com.example.api.model;
+
+import jakarta.persistence.*;
+import lombok.*;
+
 @Entity
-class Task {
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+public class Product {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    private String title;
+    
+    @Column(nullable = false)
+    private String name;
+    
+    @Column(nullable = false)
+    private Double price;
+    
     private String description;
-    private boolean completed;
-
-    // Getters e Setters
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
-    public String getTitle() { return title; }
-    public void setTitle(String title) { this.title = title; }
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
-    public boolean isCompleted() { return completed; }
-    public void setCompleted(boolean completed) { this.completed = completed; }
 }
 
-interface TaskRepository extends JpaRepository<Task, Long> {}
+// Arquivo: src/main/java/com/example/api/repository/ProductRepository.java
+package com.example.api.repository;
+
+import com.example.api.model.Product;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface ProductRepository extends JpaRepository<Product, Long> {
+}
+
+// Arquivo: src/main/java/com/example/api/service/ProductService.java
+package com.example.api.service;
+
+import com.example.api.model.Product;
+import com.example.api.repository.ProductRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 @Service
-class TaskService {
-    @Autowired
-    private TaskRepository repository;
+@RequiredArgsConstructor
+public class ProductService {
+    private final ProductRepository repository;
 
-    public List<Task> getAllTasks() {
+    public List<Product> findAll() {
         return repository.findAll();
     }
 
-    public Task getTaskById(Long id) {
-        return repository.findById(id).orElse(null);
+    public Product findById(Long id) {
+        return repository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Product not found"));
     }
 
-    public Task createTask(Task task) {
-        return repository.save(task);
+    public Product save(Product product) {
+        return repository.save(product);
     }
 
-    public void deleteTask(Long id) {
+    public void deleteById(Long id) {
         repository.deleteById(id);
     }
 }
 
+// Arquivo: src/main/java/com/example/api/controller/ProductController.java
+package com.example.api.controller;
+
+import com.example.api.model.Product;
+import com.example.api.service.ProductService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
 @RestController
-@RequestMapping("/tasks")
-class TaskController {
-    @Autowired
-    private TaskService service;
+@RequestMapping("/api/products")
+@Tag(name = "Products", description = "Product management APIs")
+@RequiredArgsConstructor
+public class ProductController {
+    private final ProductService service;
 
     @GetMapping
-    public List<Task> getAllTasks() {
-        return service.getAllTasks();
+    @Operation(summary = "Get all products")
+    public ResponseEntity<List<Product>> findAll() {
+        return ResponseEntity.ok(service.findAll());
     }
 
     @GetMapping("/{id}")
-    public Task getTaskById(@PathVariable Long id) {
-        return service.getTaskById(id);
+    @Operation(summary = "Get product by ID")
+    public ResponseEntity<Product> findById(@PathVariable Long id) {
+        return ResponseEntity.ok(service.findById(id));
     }
 
     @PostMapping
-    public Task createTask(@RequestBody Task task) {
-        return service.createTask(task);
+    @Operation(summary = "Create a new product")
+    public ResponseEntity<Product> save(@RequestBody Product product) {
+        return ResponseEntity.ok(service.save(product));
     }
 
     @DeleteMapping("/{id}")
-    public void deleteTask(@PathVariable Long id) {
-        service.deleteTask(id);
+    @Operation(summary = "Delete a product")
+    public ResponseEntity<Void> deleteById(@PathVariable Long id) {
+        service.deleteById(id);
+        return ResponseEntity.noContent().build();
     }
 }
+
+// Arquivo: src/main/resources/application.properties
+# Server
+server.port=8080
+
+# Database (H2 for development)
+spring.datasource.url=jdbc:h2:mem:testdb
+spring.datasource.driverClassName=org.h2.Driver
+spring.datasource.username=sa
+spring.datasource.password=password
+
+# H2 Console
+spring.h2.console.enabled=true
+spring.h2.console.path=/h2-console
+
+# JPA
+spring.jpa.show-sql=true
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.properties.hibernate.format_sql=true
+
+# OpenAPI
+springdoc.api-docs.path=/api-docs
+springdoc.swagger-ui.path=/swagger-ui.html
+
+# Para produção (Railway) - descomente e configure as variáveis de ambiente
+# spring.datasource.url=${DATABASE_URL}
+# spring.datasource.username=${DATABASE_USERNAME}
+# spring.datasource.password=${DATABASE_PASSWORD}
