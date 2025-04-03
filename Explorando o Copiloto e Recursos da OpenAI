@@ -1,0 +1,159 @@
+import openai
+from typing import List, Dict
+import json
+
+# Configuração inicial
+openai.api_key = "SUA_CHAVE_OPENAI"  # Substitua pela sua chave da OpenAI
+
+class CopilotExplorer:
+    def __init__(self):
+        self.content_filters = {
+            "safe": "Evita conteúdo ofensivo ou prejudicial",
+            "balanced": "Equilíbrio entre criatividade e segurança",
+            "creative": "Máxima criatividade com menos restrições"
+        }
+        
+        self.temperature_settings = {
+            "conservative": 0.3,
+            "balanced": 0.7,
+            "creative": 1.0
+        }
+    
+    def list_models(self) -> List[str]:
+        """Lista os modelos disponíveis na OpenAI"""
+        try:
+            models = openai.Model.list()
+            return [model.id for model in models.data]
+        except Exception as e:
+            print(f"Erro ao listar modelos: {e}")
+            return []
+    
+    def generate_content(self, prompt: str, model: str = "gpt-3.5-turbo", 
+                        content_filter: str = "balanced", 
+                        temperature: float = 0.7) -> Dict:
+        """
+        Gera conteúdo usando a API da OpenAI com filtros configuráveis
+        
+        Args:
+            prompt: Texto de entrada para a geração
+            model: Modelo da OpenAI a ser usado
+            content_filter: Nível de filtro de conteúdo (safe, balanced, creative)
+            temperature: Criatividade da resposta (0.0 a 1.0)
+        
+        Returns:
+            Dicionário com a resposta e metadados
+        """
+        try:
+            response = openai.ChatCompletion.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=temperature,
+                max_tokens=1500
+            )
+            
+            return {
+                "response": response.choices[0].message.content,
+                "model": model,
+                "filter": content_filter,
+                "temperature": temperature,
+                "usage": response.usage
+            }
+        except Exception as e:
+            print(f"Erro ao gerar conteúdo: {e}")
+            return {}
+    
+    def analyze_content_safety(self, text: str) -> Dict:
+        """
+        Analisa a segurança do conteúdo usando os filtros da OpenAI
+        
+        Args:
+            text: Texto a ser analisado
+        
+        Returns:
+            Dicionário com análise de segurança
+        """
+        try:
+            response = openai.Moderation.create(input=text)
+            return response.results[0]
+        except Exception as e:
+            print(f"Erro ao analisar segurança: {e}")
+            return {}
+    
+    def compare_responses(self, prompt: str) -> Dict:
+        """
+        Compara respostas com diferentes configurações de filtro e temperatura
+        
+        Args:
+            prompt: Texto de entrada para comparação
+        
+        Returns:
+            Dicionário com respostas comparativas
+        """
+        results = {}
+        
+        for filter_name, filter_desc in self.content_filters.items():
+            for temp_name, temp_value in self.temperature_settings.items():
+                key = f"{filter_name}_{temp_name}"
+                print(f"Gerando: {key}")
+                
+                results[key] = self.generate_content(
+                    prompt=prompt,
+                    content_filter=filter_name,
+                    temperature=temp_value
+                )
+        
+        return results
+    
+    def run_interactive_demo(self):
+        """Executa uma demonstração interativa do LAB"""
+        print("\n=== LAB: Explorando Copiloto e Recursos da OpenAI ===")
+        print("Modelos disponíveis:", ", ".join(self.list_models()))
+        
+        while True:
+            print("\nOpções:")
+            print("1. Gerar conteúdo com configurações personalizadas")
+            print("2. Analisar segurança de conteúdo")
+            print("3. Comparar respostas com diferentes configurações")
+            print("4. Sair")
+            
+            choice = input("Escolha uma opção: ")
+            
+            if choice == "1":
+                prompt = input("\nDigite seu prompt: ")
+                model = input(f"Modelo (Enter para gpt-3.5-turbo): ") or "gpt-3.5-turbo"
+                filter_choice = input("Filtro (safe/balanced/creative, Enter para balanced): ") or "balanced"
+                temp = float(input("Temperatura (0.0-1.0, Enter para 0.7): ") or 0.7)
+                
+                result = self.generate_content(prompt, model, filter_choice, temp)
+                print("\nResultado:")
+                print(result["response"])
+                print(f"\nTokens usados: {result['usage']['total_tokens']}")
+            
+            elif choice == "2":
+                text = input("\nDigite o texto para análise de segurança: ")
+                analysis = self.analyze_content_safety(text)
+                print("\nAnálise de Segurança:")
+                print(json.dumps(analysis, indent=2))
+            
+            elif choice == "3":
+                prompt = input("\nDigite seu prompt para comparação: ")
+                print("\nGerando respostas com diferentes configurações...")
+                results = self.compare_responses(prompt)
+                
+                print("\n=== Comparação ===")
+                for config, result in results.items():
+                    print(f"\nConfig: {config}")
+                    print(f"Resposta: {result['response'][:200]}...")
+                    print(f"Tokens: {result['usage']['total_tokens']}")
+            
+            elif choice == "4":
+                print("Encerrando o LAB...")
+                break
+            
+            else:
+                print("Opção inválida. Tente novamente.")
+
+# Execução principal
+if __name__ == "__main__":
+    explorer = CopilotExplorer()
+    explorer.run_interactive_demo()
